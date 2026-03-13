@@ -1,0 +1,21 @@
+[project]
+name = "evergrow"
+version = "v1.9.0"
+description = "A RAG-based Intelligent Q&A system for educational scenarios, integrating ChromaDB and FastAPI to provide structured parenting guidance."
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "chromadb>=1.5.2",
+    "dotenv>=0.9.9",
+    "fastapi>=0.135.1",
+    "bcrypt>=4.0.0",
+    "PyJWT>=2.8.0",
+    "langchain>=1.2.10",
+    "openai>=2.26.0",
+    "pandas>=3.0.1",
+    "pymysql>=1.1.2",
+    "python-docx>=1.2.0",
+    "pyyaml>=6.0.3",
+    "tavily-python>=0.7.22",
+    "uvicorn>=0.41.0",
+]
