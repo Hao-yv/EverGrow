@@ -129,7 +129,14 @@ def _stream_ndjson(
                 save_message(conversation_id, "user", question)
                 save_message(conversation_id, "assistant", "".join(full_answer), doc_ids)
     except Exception as e:
-        yield json.dumps({"error": str(e)}, ensure_ascii=False) + "\n"
+        yield json.dumps(
+            {
+                "code": "STREAM_ERROR",
+                "message": "流式生成失败",
+                "detail": str(e),
+            },
+            ensure_ascii=False,
+        ) + "\n"
 
 
 @router.post("/routes")

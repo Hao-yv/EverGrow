@@ -42,6 +42,12 @@ def _extract_error(resp: requests.Response) -> str:
     """统一提取 API 错误信息"""
     try:
         data = resp.json()
+        message = data.get("message")
+        if isinstance(message, str) and message.strip():
+            detail = data.get("detail")
+            if isinstance(detail, str) and detail.strip():
+                return f"{message.strip()}：{detail.strip()}"
+            return message.strip()
         detail = data.get("detail")
         if isinstance(detail, str) and detail.strip():
             return detail.strip()
@@ -356,6 +362,11 @@ if question := st.chat_input("请输入您的问题，例如：孩子写作业�
                         placeholder.markdown("".join(chunks))
                     elif "error" in data:
                         stream_error = data["error"]
+                        placeholder.error(stream_error)
+                        break
+                    elif data.get("code") and data.get("message"):
+                        detail = data.get("detail")
+                        stream_error = data["message"] if not detail else f"{data['message']}：{detail}"
                         placeholder.error(stream_error)
                         break
                 except json.JSONDecodeError:

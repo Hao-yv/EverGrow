@@ -16,6 +16,14 @@ ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 7  # 7 天
 
 
+class TokenDecodeError(Exception):
+    """JWT 解码错误"""
+
+    def __init__(self, reason: str):
+        super().__init__(reason)
+        self.reason = reason
+
+
 def hash_password(password: str) -> str:
     """密码哈希"""
     return bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
@@ -36,9 +44,11 @@ def create_access_token(user_id: int, username: str) -> str:
     return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
 
 
-def decode_token(token: str) -> dict | None:
-    """解码并验证 JWT，失败返回 None"""
+def decode_token(token: str) -> dict:
+    """解码并验证 JWT，失败抛出 TokenDecodeError"""
     try:
         return jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-    except jwt.PyJWTError:
-        return None
+    except jwt.ExpiredSignatureError as e:
+        raise TokenDecodeError("expired") from e
+    except jwt.InvalidTokenError as e:
+        raise TokenDecodeError("invalid") from e

@@ -7,6 +7,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, field_validator
 
 from app.core.auth import (
+    TokenDecodeError,
     create_access_token,
     decode_token,
     hash_password,
@@ -79,13 +80,46 @@ def get_current_user_id(
     """从 Bearer token 解析用户 ID，未登录返回 None"""
     if not cred or not cred.credentials:
         return None
-    payload = decode_token(cred.credentials)
-    if not payload or "sub" not in payload:
-        return None
+    try:
+        payload = decode_token(cred.credentials)
+    except TokenDecodeError as e:
+        if e.reason == "expired":
+            raise HTTPException(
+                status_code=401,
+                detail={
+                    "code": "TOKEN_EXPIRED",
+                    "message": "登录已过期，请重新登录",
+                    "detail": "jwt expired",
+                },
+            ) from e
+        raise HTTPException(
+            status_code=401,
+            detail={
+                "code": "TOKEN_INVALID",
+                "message": "无效的登录凭证，请重新登录",
+                "detail": "jwt invalid",
+            },
+        ) from e
+    if "sub" not in payload:
+        raise HTTPException(
+            status_code=401,
+            detail={
+                "code": "TOKEN_INVALID",
+                "message": "无效的登录凭证，请重新登录",
+                "detail": "jwt missing sub",
+            },
+        )
     try:
         return int(payload["sub"])
     except (ValueError, TypeError):
-        return None
+        raise HTTPException(
+            status_code=401,
+            detail={
+                "code": "TOKEN_INVALID",
+                "message": "无效的登录凭证，请重新登录",
+                "detail": "jwt sub invalid",
+            },
+        )
 
 
 def require_user(user_id: int | None = Depends(get_current_user_id)) -> int:
