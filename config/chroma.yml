@@ -1,10 +1,20 @@
 collection_name: agent
-persist_directory: chroma_db
+persist_directory: data/chroma_db
 k: 3
-data_path: data
+data_path: data/raw
 md5_hex_store: md5.txt
-allow_knowledge_file_type: ["txt", "pdf"]
+allow_knowledge_file_type: ["txt", "pdf", "docx", "doc"]
 
-chunk_size: 200
-chunk_overlap: 20
+# 分块策略（按段落 + overlap）
+chunk_size: 700
+chunk_overlap: 100
 separators: ["\n\n", "\n", ".", "!", "。", "?", " ", ""]
+
+# 检索与重排策略
+recall_k: 10
+keyword_k: 10
+rerank_k: 3
+similarity_threshold: 0.22
+keyword_threshold: 0.2
+hybrid_vector_weight: 0.7
+hybrid_keyword_weight: 0.3

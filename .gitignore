@@ -1,0 +1,43 @@
+# 仅提交必须的代码，以下不纳入版本控制
+
+# 构建与依赖
+build/
+dist/
+wheels/
+*.egg-info
+*.egg
+
+# 虚拟环境
+.venv/
+venv/
+
+# 敏感配置（本地复制 .env.example 为 .env 后填写）
+.env
+
+# 数据库配置（含密码，本地维护）
+config/database.yml
+
+# 数据与生成文件
+data/
+docs/
+md5.txt
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.mypy_cache/
+.pytest_cache/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# 日志与缓存
+*.log
+*.tmp
+.cache/

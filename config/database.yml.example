@@ -1,0 +1,6 @@
+database:
+  host: localhost
+  port: 3306
+  database: evergrow_db
+  user: root
+  password: ""  # 从环境变量读取或本地填写

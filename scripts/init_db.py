@@ -1,146 +1,148 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 """
-@Time    : 2026/3/13
-@Author  : Zhang Hao yv
-@File    : init_db.py
-@Desc    : 基于 PyMySQL 的数据库初始化脚本。创建表结构并插入默认 admin 账户。
-@Run     : 在项目根目录执行 python scripts/init_db.py
+EverGrow 数据库初始化脚本
+- 创建表：knowledge_articles, users, conversations, conversation_messages
+- 创建初始管理员：username=admin, password=admin
+
+依赖：pymysql, pyyaml, bcrypt
+运行：python scripts/init_db.py
 """
-import os
+
+from pathlib import Path
 import sys
-import yaml
-import pymysql
 
-# 项目根目录加入 path
-_SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-_PROJECT_ROOT = os.path.dirname(_SCRIPT_DIR)
-if _PROJECT_ROOT not in sys.path:
-    sys.path.insert(0, _PROJECT_ROOT)
+# 项目根目录
+ROOT = Path(__file__).parent.parent
+sys.path.insert(0, str(ROOT))
 
-# 密码哈希：优先 bcrypt，否则 passlib
 try:
+    import pymysql
+    import yaml
     import bcrypt
-    def _hash_password(password: str) -> str:
-        return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
-except ImportError:
-    try:
-        from passlib.hash import bcrypt as passlib_bcrypt
-        def _hash_password(password: str) -> str:
-            return passlib_bcrypt.hash(password)
-    except ImportError:
-        raise ImportError(
-            "请安装 bcrypt 或 passlib: pip install bcrypt 或 pip install 'passlib[bcrypt]'"
-        )
+except ImportError as e:
+    print("请先安装依赖: pip install pymysql pyyaml bcrypt")
+    raise SystemExit(1) from e
 
 
-def _load_db_config() -> dict:
-    """从 config/database.yml 加载数据库配置"""
-    config_path = os.path.join(_PROJECT_ROOT, "config", "database.yml")
-    with open(config_path, "r", encoding="utf-8") as f:
-        conf = yaml.safe_load(f)
-    return conf.get("database", {})
+def load_db_config():
+    config_path = ROOT / "config" / "database.yml"
+    if not config_path.exists():
+        raise FileNotFoundError(f"配置文件不存在: {config_path}")
+    with open(config_path, encoding="utf-8") as f:
+        data = yaml.safe_load(f)
+    return data["database"]
 
 
-def _get_connection_params() -> tuple:
-    """获取连接参数：(host, port, user, password, database)"""
-    conf = _load_db_config()
-    return (
-        conf.get("host", "localhost"),
-        int(conf.get("port", 3306)),
-        conf.get("user", "root"),
-        str(conf.get("password", "")),
-        conf.get("database", "evergrow_db"),
-    )
-
-
-def _create_database(cursor, db_name: str) -> None:
-    """创建数据库（如不存在）"""
-    cursor.execute(f"CREATE DATABASE IF NOT EXISTS `{db_name}` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci")
-    cursor.execute(f"USE `{db_name}`")
-
-
-def _create_tables(cursor) -> None:
-    """创建表结构：users, sessions, messages"""
-    # 按依赖顺序删除（messages -> sessions -> users）
-    cursor.execute("DROP TABLE IF EXISTS messages")
-    cursor.execute("DROP TABLE IF EXISTS sessions")
-    cursor.execute("DROP TABLE IF EXISTS users")
-
-    cursor.execute("""
-        CREATE TABLE users (
-            id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-            username VARCHAR(64) NOT NULL UNIQUE,
-            password_hash VARCHAR(255) NOT NULL,
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
-    """)
-
-    cursor.execute("""
-        CREATE TABLE sessions (
-            id VARCHAR(64) PRIMARY KEY,
-            user_id BIGINT UNSIGNED NULL,
-            title VARCHAR(100) NOT NULL DEFAULT '',
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-            CONSTRAINT fk_session_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE RESTRICT,
-            INDEX idx_sessions_user_updated (user_id, updated_at DESC)
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
-    """)
-
-    cursor.execute("""
-        CREATE TABLE messages (
-            id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-            session_id VARCHAR(64) NOT NULL,
-            role ENUM('user','assistant') NOT NULL,
-            content TEXT NOT NULL,
-            message_type VARCHAR(32) NOT NULL DEFAULT 'normal',
-            metadata JSON NULL,
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-            CONSTRAINT fk_message_session FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE,
-            INDEX idx_messages_session_created (session_id, created_at)
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
-    """)
-
-
-def _insert_admin_user(cursor, username: str = "admin", password: str = "admin") -> None:
-    """插入默认 admin 账户，若已存在则更新密码"""
-    password_hash = _hash_password(password)
-    cursor.execute(
-        """
-        INSERT INTO users (username, password_hash)
-        VALUES (%s, %s)
-        ON DUPLICATE KEY UPDATE password_hash = VALUES(password_hash), updated_at = CURRENT_TIMESTAMP
-        """,
-        (username, password_hash),
-    )
-
-
-def main() -> None:
-    host, port, user, password, db_name = _get_connection_params()
-
-    print(f"[init_db] 连接数据库 {host}:{port} / {db_name} ...")
-    conn = pymysql.connect(
-        host=host,
-        port=port,
-        user=user,
-        password=password,
+def get_connection(config):
+    return pymysql.connect(
+        host=config["host"],
+        port=config["port"],
+        user=config["user"],
+        password=config["password"],
+        database=config["database"],
         charset="utf8mb4",
-        autocommit=False,
     )
 
+
+def create_tables(conn):
+    sql = """
+    SET NAMES utf8mb4;
+    SET FOREIGN_KEY_CHECKS = 0;
+
+    CREATE TABLE IF NOT EXISTS `knowledge_articles` (
+      `id` BIGINT NOT NULL AUTO_INCREMENT,
+      `chroma_doc_id` VARCHAR(64) NOT NULL COMMENT 'Chroma 文档 ID',
+      `title` VARCHAR(200) NOT NULL COMMENT '问题/标题',
+      `stage` VARCHAR(30) NULL COMMENT '年龄段',
+      `category` VARCHAR(30) NULL COMMENT '矛盾类型',
+      `source_file` VARCHAR(255) NULL COMMENT '原始文件名',
+      `source_author` VARCHAR(100) NULL COMMENT '作者/机构',
+      `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY (`id`),
+      UNIQUE KEY `uk_chroma_doc_id` (`chroma_doc_id`),
+      KEY `idx_stage_category` (`stage`, `category`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='知识条目元数据';
+
+    CREATE TABLE IF NOT EXISTS `users` (
+      `id` BIGINT NOT NULL AUTO_INCREMENT,
+      `username` VARCHAR(50) NOT NULL COMMENT '用户名',
+      `password_hash` VARCHAR(255) NOT NULL COMMENT '密码哈希',
+      `nickname` VARCHAR(50) NULL COMMENT '昵称',
+      `is_active` TINYINT(1) NOT NULL DEFAULT 1 COMMENT '是否启用',
+      `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      PRIMARY KEY (`id`),
+      UNIQUE KEY `uk_username` (`username`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='用户';
+
+    CREATE TABLE IF NOT EXISTS `conversations` (
+      `id` BIGINT NOT NULL AUTO_INCREMENT,
+      `user_id` BIGINT NULL COMMENT '用户，匿名为空',
+      `session_id` VARCHAR(64) NULL COMMENT '匿名会话标识',
+      `title` VARCHAR(100) NULL COMMENT '会话摘要',
+      `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      PRIMARY KEY (`id`),
+      KEY `idx_user_id` (`user_id`),
+      KEY `idx_session_id` (`session_id`),
+      CONSTRAINT `fk_conv_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE SET NULL
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='问答会话';
+
+    CREATE TABLE IF NOT EXISTS `conversation_messages` (
+      `id` BIGINT NOT NULL AUTO_INCREMENT,
+      `conversation_id` BIGINT NOT NULL COMMENT '所属会话',
+      `role` ENUM('user','assistant') NOT NULL COMMENT '角色',
+      `content` TEXT NOT NULL COMMENT '消息内容',
+      `retrieved_doc_ids` JSON NULL COMMENT '引用的 chroma_doc_id 列表',
+      `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY (`id`),
+      KEY `idx_conversation_id` (`conversation_id`),
+      CONSTRAINT `fk_cm_conversation` FOREIGN KEY (`conversation_id`) REFERENCES `conversations` (`id`) ON DELETE CASCADE
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='会话消息';
+
+    SET FOREIGN_KEY_CHECKS = 1;
+    """
+    for stmt in sql.split(";"):
+        stmt = stmt.strip()
+        if stmt and not stmt.startswith("--"):
+            with conn.cursor() as cur:
+                cur.execute(stmt)
+    conn.commit()
+
+
+def create_admin_user(conn):
+    password_hash = bcrypt.hashpw(b"admin", bcrypt.gensalt()).decode()
+
+    with conn.cursor() as cur:
+        cur.execute("SELECT id FROM users WHERE username = %s", ("admin",))
+        if cur.fetchone():
+            print("admin 用户已存在，跳过创建")
+            return
+        cur.execute(
+            "INSERT INTO users (username, password_hash, nickname) VALUES (%s, %s, %s)",
+            ("admin", password_hash, "管理员"),
+        )
+    conn.commit()
+    print("已创建初始管理员: username=admin, password=admin")
+
+
+def main():
+    print("正在加载配置...")
+    config = load_db_config()
+
+    print("正在连接数据库...")
+    conn = get_connection(config)
+
     try:
-        with conn.cursor() as cursor:
-            _create_database(cursor, db_name)
-            print("[init_db] 创建表结构...")
-            _create_tables(cursor)
-            print("[init_db] 插入 admin 账户 (admin/admin)...")
-            _insert_admin_user(cursor, "admin", "admin")
-        conn.commit()
-        print("[init_db] 初始化完成。")
-    except Exception as e:
-        conn.rollback()
-        print(f"[init_db] 错误: {e}")
-        raise
+        print("正在创建表...")
+        create_tables(conn)
+        print("表创建完成")
+
+        print("正在创建初始管理员...")
+        create_admin_user(conn)
+
+        print("数据库初始化完成")
     finally:
         conn.close()
 
