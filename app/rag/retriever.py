@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 EverGrow RAG 检索模块
 从 Chroma 向量库检索与问题相关的文档
@@ -262,8 +261,8 @@ def search(
         row["hybrid_score"] = score
 
         passes_threshold = (
-            row["vector_similarity"] >= similarity_threshold
-            or row["keyword_score"] >= keyword_threshold
+            row["vector_similarity"] >= similarity_threshold or
+            row["keyword_score"] >= keyword_threshold
         )
         if passes_threshold:
             rerank_rows.append(row)

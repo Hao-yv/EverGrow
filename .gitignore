@@ -19,7 +19,6 @@ config/database.yml
 
 # 数据与生成文件
 data/
-docs/
 md5.txt
 
 # Python
