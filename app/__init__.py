@@ -17,7 +17,7 @@ from app.core.config import ROOT as APP_ROOT
 from app.core.config import get_chroma_config, validate_startup_config
 from app.core.db import get_db
 
-app = FastAPI(title="EverGrow", description="亲子矛盾 RAG 智能问答平台")
+app = FastAPI(title="EverGrow", description="家庭教育 RAG 智能问答平台")
 logger = logging.getLogger(__name__)
 
 
